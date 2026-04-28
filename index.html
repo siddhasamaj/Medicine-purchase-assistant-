@@ -1,0 +1,244 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistant - Purchasing</title>
+    <style>
+        :root { --primary: #00796b; --bg: #e0f2f1; --card: #fff; --text: #333; --danger: #d32f2f; --success: #388e3c; --warning: #fbc02d; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; padding-bottom: 70px; overflow-x: hidden; -webkit-touch-callout: none;}
+        .container { padding: 15px; }
+        .card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; border-left: 5px solid var(--primary); }
+        .bill-group { background: white; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .bill-header { background: var(--primary); color: white; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        
+        select, button, input { width: 100%; padding: 12px; margin-top: 8px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; box-sizing: border-box;}
+        button { font-weight: bold; cursor: pointer; border: none; background: var(--primary); color: white;}
+        .cash-box { display: flex; justify-content: space-between; background: var(--primary); color: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; font-weight: bold; }
+        .img-container { display: flex; gap: 8px; overflow-x: auto; margin-top: 10px; padding-bottom: 5px;}
+        .img-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc;}
+        .tab-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; display: flex; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 100; }
+        .tab-btn { flex: 1; background: none; color: #666; padding: 15px 0; margin: 0; border-radius: 0; font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .tab-btn.active { color: var(--primary); border-top: 3px solid var(--primary); font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; max-height: 90vh; overflow-y: auto;}
+        .switch-loc { font-size: 12px; background: #eee; padding: 4px 8px; border-radius: 4px; margin-top: 5px; width: auto; display: inline-block; }
+
+        /* Swipe to Action Styles */
+        .swipe-container { position: relative; overflow: hidden; border-bottom: 1px solid #eee; background: #fff; }
+        .swipe-actions { position: absolute; top: 0; right: 0; height: 100%; display: flex; z-index: 1; }
+        .swipe-actions button { border: none; color: white; padding: 0 20px; font-weight: bold; height: 100%; margin: 0; border-radius: 0; cursor: pointer; }
+        .btn-edit { background: var(--warning); color: #000 !important; }
+        .btn-del { background: var(--danger); }
+        .swipe-content { background: white; padding: 15px; position: relative; z-index: 2; transition: transform 0.3s ease; width: 100%; box-sizing: border-box; }
+        .swipe-content.swiped { transform: translateX(-160px); }
+    </style>
+</head>
+<body>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('tab-buy')">🛒<br>Buy</button>
+        <button class="tab-btn" onclick="switchTab('tab-history')">🕒<br>History</button>
+    </div>
+
+    <div class="container">
+        <div id="tab-buy" class="tab-content active">
+            <div class="cash-box"><span>Cash Balance:</span><span id="cash-balance" style="font-size: 20px;">₹0</span></div>
+            <select id="shopFilter" onchange="renderAssistant()"></select>
+            <p style="font-size: 12px; color: var(--danger); text-align: center; margin-top: 10px;">Swipe left on items to Edit or Delete.</p>
+            <div id="purchase-list" style="margin-top: 15px;"></div>
+        </div>
+
+        <div id="tab-history" class="tab-content">
+            <div class="card">
+                <h3>History</h3>
+                <input type="text" id="historySearch" placeholder="Search medicine or person..." onkeyup="renderHistory()">
+                <div id="history-list" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="purchaseModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Complete Purchase</h3>
+            <p id="modalSub" style="font-size: 14px; color: #666;"></p>
+            <label style="font-weight: bold; font-size: 14px;">Actual Shop:</label>
+            <select id="modalShop" onchange="checkDiscount()"></select>
+            <label style="font-weight: bold; font-size: 14px; margin-top: 10px; display: block;">Quantity Bought:</label>
+            <input type="number" id="modalQty">
+            <label style="font-weight: bold; font-size: 14px; margin-top: 10px; display: block;">Bill Amount (₹):</label>
+            <input type="number" id="modalRate">
+            <div id="discountZone" style="display: none; background: #e8f5e9; padding: 10px; margin-top: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; color: #2e7d32;">
+                <input type="checkbox" id="applyDiscount" style="width: auto; margin-right: 5px;"> Apply 7% Prabha Discount
+            </div>
+            <input type="hidden" id="modalReqId">
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button style="background: #999;" onclick="closeModal('purchaseModal')">Cancel</button>
+                <button style="background: var(--success);" onclick="savePurchase()">Pay</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-content">
+            <h3>Edit Request</h3>
+            <label style="font-weight: bold; font-size: 14px;">Person Name:</label>
+            <input type="text" id="editPersonName">
+            <label style="font-weight: bold; font-size: 14px; margin-top: 10px; display: block;">Target Quantity:</label>
+            <input type="number" id="editTargetQty">
+            <input type="hidden" id="editingReqId">
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button style="background: #999;" onclick="closeModal('editModal')">Cancel</button>
+                <button style="background: var(--warning); color: #000;" onclick="saveAssistantEdit()">Update</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="imageModal" onclick="closeModal('imageModal')">
+        <div style="background: transparent; display: flex; flex-direction: column; align-items: center; width: 100%;">
+            <img id="enlargedImage" style="max-width: 95%; max-height: 80vh; border-radius: 8px; border: 2px solid white;">
+            <button style="margin-top: 15px; width: auto; padding: 10px 20px; background: white; color: black; border-radius: 20px;" onclick="closeModal('imageModal')">Close</button>
+        </div>
+    </div>
+
+    <script>
+        let db = JSON.parse(localStorage.getItem('trustMedV9')) || { requests: [], cash: 0, shops: [] };
+        let currentSwipeItem = null; let startX = 0;
+
+        // Swipe Gestures
+        function handleTouchStart(e) { startX = e.touches[0].clientX; }
+        function handleTouchEnd(e, id) {
+            let endX = e.changedTouches[0].clientX; let diff = startX - endX;
+            let el = document.getElementById('swipe-' + id);
+            if(!el) return;
+            if (diff > 50) { 
+                if(currentSwipeItem && currentSwipeItem !== el) currentSwipeItem.classList.remove('swiped');
+                el.classList.add('swiped'); currentSwipeItem = el;
+            } else if (diff < -50) { 
+                el.classList.remove('swiped'); if(currentSwipeItem === el) currentSwipeItem = null;
+            }
+        }
+        document.addEventListener('click', function(e) {
+            if (currentSwipeItem && !e.target.closest('.swipe-actions')) { currentSwipeItem.classList.remove('swiped'); currentSwipeItem = null; }
+        });
+
+        function saveData() { localStorage.setItem('trustMedV9', JSON.stringify(db)); renderAssistant(); renderHistory(); }
+        function switchTab(tabId) { document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); document.getElementById(tabId).classList.add('active'); event.currentTarget.classList.add('active'); }
+        function viewPhoto(base64) { document.getElementById('enlargedImage').src = base64; document.getElementById('imageModal').style.display = 'flex'; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+        function changeLocation(reqId, selectElement) { let req = db.requests.find(r => r.id === reqId); req.shop = selectElement.value; saveData(); }
+
+        // Assistant Edit/Delete
+        function deleteReq(id) { if(confirm("Permanently remove this request?")) { db.requests = db.requests.filter(r => r.id !== id); saveData(); } }
+        
+        function openEditModal(id) {
+            let req = db.requests.find(r => r.id === id);
+            document.getElementById('editingReqId').value = req.id;
+            document.getElementById('editPersonName').value = req.person;
+            document.getElementById('editTargetQty').value = req.qtyNeeded;
+            if(currentSwipeItem) currentSwipeItem.classList.remove('swiped');
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function saveAssistantEdit() {
+            let req = db.requests.find(r => r.id === parseInt(document.getElementById('editingReqId').value));
+            req.person = document.getElementById('editPersonName').value;
+            req.qtyNeeded = parseInt(document.getElementById('editTargetQty').value);
+            saveData(); closeModal('editModal');
+        }
+
+        // Purchasing
+        function openModal(id) {
+            let req = db.requests.find(r => r.id === id);
+            document.getElementById('modalReqId').value = id;
+            document.getElementById('modalTitle').innerText = `Buy: ${req.medicine}`; document.getElementById('modalSub').innerText = `Target Qty: ${req.qtyNeeded}`;
+            document.getElementById('modalQty').value = req.qtyNeeded; document.getElementById('modalRate').value = ''; 
+            document.getElementById('modalShop').innerHTML = db.shops.map(s => `<option value="${s}" ${s===req.shop?'selected':''}>${s}</option>`).join('');
+            checkDiscount(); document.getElementById('purchaseModal').style.display = 'flex';
+        }
+
+        function checkDiscount() {
+            let shop = document.getElementById('modalShop').value; let dz = document.getElementById('discountZone'); let cb = document.getElementById('applyDiscount');
+            if(shop.toLowerCase().includes('prabha')) { dz.style.display = 'block'; cb.checked = true; } else { dz.style.display = 'none'; cb.checked = false; }
+        }
+
+        function savePurchase() {
+            let req = db.requests.find(r => r.id === parseInt(document.getElementById('modalReqId').value));
+            let qty = parseInt(document.getElementById('modalQty').value); let rate = parseFloat(document.getElementById('modalRate').value);
+            if(!qty || isNaN(rate)) return alert("Invalid entry.");
+            let finalRate = document.getElementById('applyDiscount').checked ? (rate * 0.93) : rate;
+            req.shop = document.getElementById('modalShop').value; req.qtyBought += qty; req.rate += finalRate;
+            req.history.push({ date: new Date().toISOString(), qty: qty, amount: finalRate, shop: req.shop });
+            db.cash -= finalRate; req.status = (req.qtyBought >= req.qtyNeeded) ? 'Bought' : 'Partial';
+            saveData(); closeModal('purchaseModal');
+        }
+
+        function renderAssistant() {
+            document.getElementById('cash-balance').innerText = `₹${db.cash.toFixed(2)}`;
+            let filter = document.getElementById('shopFilter').value;
+            document.getElementById('shopFilter').innerHTML = '<option value="All">Show All Shops</option>' + db.shops.map(s => `<option value="${s}" ${s===filter?'selected':''}>${s}</option>`).join('');
+
+            let activeReqs = db.requests.filter(r => (r.status === 'Sent to Assistant' || r.status === 'Partial') && (filter === 'All' || !filter || r.shop === filter));
+            let groupedByPerson = {};
+            activeReqs.forEach(req => { if(!groupedByPerson[req.person]) groupedByPerson[req.person] = []; groupedByPerson[req.person].push(req); });
+
+            let html = '';
+            for(let person in groupedByPerson) {
+                html += `<div class="bill-group"><div class="bill-header"><span>👤 Bill for: ${person}</span></div>`;
+                groupedByPerson[person].forEach(req => {
+                    let imgHtml = '';
+                    if((req.rxImgs && req.rxImgs.length > 0) || (req.medImgs && req.medImgs.length > 0)) {
+                        imgHtml += `<div class="img-container">`;
+                        if(req.rxImgs) req.rxImgs.forEach(img => imgHtml += `<img src="${img}" class="img-thumb" onclick="viewPhoto('${img}')">`);
+                        if(req.medImgs) req.medImgs.forEach(img => imgHtml += `<img src="${img}" class="img-thumb" onclick="viewPhoto('${img}')">`);
+                        imgHtml += `</div>`;
+                    }
+                    let shopOptions = db.shops.map(s => `<option value="${s}" ${s===req.shop?'selected':''}>${s}</option>`).join('');
+
+                    html += `
+                    <div class="swipe-container">
+                        <div class="swipe-actions">
+                            <button class="btn-edit" onclick="openEditModal(${req.id})">Edit</button>
+                            <button class="btn-del" onclick="deleteReq(${req.id})">Delete</button>
+                        </div>
+                        <div class="swipe-content" id="swipe-${req.id}" ontouchstart="handleTouchStart(event)" ontouchend="handleTouchEnd(event, ${req.id})" style="padding: 15px; border-left: none;">
+                            <strong style="font-size: 18px;">${req.medicine}</strong>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size: 13px; color: #666;">Target: ${req.qtyNeeded} | Bought: ${req.qtyBought}</span>
+                                <select class="switch-loc" onchange="changeLocation(${req.id}, this)">${shopOptions}</select>
+                            </div>
+                            ${imgHtml}
+                            <button style="margin-top: 10px; padding: 8px; font-size: 14px;" onclick="openModal(${req.id})">Buy Item</button>
+                        </div>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+            document.getElementById('purchase-list').innerHTML = html || '<div style="text-align:center; padding:20px; color: #666;">No items pending.</div>';
+        }
+
+        function renderHistory() {
+            let q = document.getElementById('historySearch').value.toLowerCase(); let html = '';
+            let sortedRequests = [...db.requests].reverse();
+            sortedRequests.forEach(req => {
+                if(req.history.length > 0 && (req.medicine.toLowerCase().includes(q) || req.person.toLowerCase().includes(q))) {
+                    req.history.forEach((tx) => {
+                        html += `<div style="border-bottom: 1px solid #eee; padding: 12px 0;">
+                            <strong style="font-size: 18px;">${req.medicine}</strong> <span style="color: #666; font-size: 14px;">(For ${req.person})</span><br>
+                            <span style="font-size:13px; color:#666;">Date: ${new Date(tx.date).toLocaleDateString()} @ ${tx.shop}</span><br>
+                            <span style="font-size:14px; color:var(--primary); font-weight:bold;">Rate: ₹${tx.amount.toFixed(2)} for ${tx.qty} qty</span>
+                        </div>`;
+                    });
+                }
+            });
+            document.getElementById('history-list').innerHTML = html || '<p style="color: #666;">No purchase history found.</p>';
+        }
+
+        renderAssistant(); renderHistory();
+        window.addEventListener('storage', (e) => { if(e.key === 'trustMedV9') { db = JSON.parse(e.newValue); renderAssistant(); renderHistory(); } });
+    </script>
+</body>
+</html>
